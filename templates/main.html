@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="/static/assets/styles/main.style.css">
+    <title>Welcome to VEA (Video Emotion Analyzer)</title>
+</head>
+
+<body>
+    <div class="data_block">
+        <h1>Video Emotion Analyzer</h1>
+        <div class="data_variants">
+
+            <div class="variant">
+                <form action="/download" method="POST">
+                    <h4>Загрузить видео из YouTube по URL:</h4>
+                    <input id="input_youtube_url" name="input_video_url" type="text" value="https://www.youtube.com/watch?v=0ZdMjl8kN2o" />
+                    <p>
+                        <input class="submit_button" type="submit" name="submit_video" value="Загрузить" />
+                    </p>
+                </form>
+            </div>
+            <!--=======================================================================================================================-->
+            <div class="variant center">
+                <p>или</p>
+            </div>
+            <!--=======================================================================================================================-->
+            <div class="variant">
+                <form action="/upload" method="POST" enctype="multipart/form-data">
+                    <h4>Загрузить видео файлом:</h4>
+                    <input type="file" name="upload_video_file" id="input_video_file" style="display: none;" multiple="true">
+            
+                    <p>
+                        <label for="input_video_file" style="cursor: pointer;">
+                            <img id="image" title="Прикрепить файл" src="static/assets/icons/icon_upload.png" style="cursor: pointer; width: 30px; height: 30px;" alt="Choose video">
+                        </label> 
+                    </p>
+                    <input class="submit_button" type="submit" name="submit_video" value="Загрузить" />
+                </form>
+            </div>
+            
+        </div>
+        <!-- <p class="note">  -->
+            <!-- style="color: brown; text-align: center;" -->
+            <!-- Примечание: Пожалуйста, загружайте видео с разрешением более чем 360p -->
+        <!-- </p> -->
+
+        {% if all_projects %}
+
+        <hr/>
+
+        <div class="projects_block">
+            <h3 style="text-align: center;">Ранее созданные проекты:</h3>
+
+            <ul class="projects_list">
+
+                {% for project in all_projects %}
+                <li class="project">
+                    <a class="project_link" href="/project/{{project}}">
+                        
+                        <div class="project_area top">
+                            
+                            <div class="project_info column">
+                                <img class="project_preview" src="/static/projects/{{project}}/preview.jpg">
+                                
+                                {% if meta[loop.index - 1].video_duration %}
+                                <div class="project_info duration" title="Продолжительность видео">
+                                    <img class="icon" src="/static/assets/icons/icon_play.png"/>
+                                    <p>
+                                        {{meta[loop.index - 1].video_duration}}
+                                    </p>
+                                </div>
+                                {% endif %}
+                                
+                            </div>
+
+                            <!-- <div style="width: 100%; margin: 0 10px"> -->
+                            <div class="project_info column max-width">
+                                <p class="heading">
+                                    <span class="pjct_name">
+                                        {{project}}
+                                    </span>
+                                </p>
+                                <p class="descr" style="margin: 0;">
+                                    {% if meta[loop.index - 1].description %}
+                                        {{meta[loop.index - 1].description}}
+                                    {% else %}
+                                        Опасание к проекту не задано
+                                    {% endif %}
+                                </p>
+                            </div>
+                        </div>
+
+                        <div class="project_area bottom">
+                            {% if meta[loop.index - 1].created_date %}
+                            <div class="attributes">
+                                <div class="date">
+                                    <img class="icon" src="/static/assets/icons/icon_calendar.png"/>
+                                    <p class="text">Дата создания проекта: {{meta[loop.index - 1].created_date}}</p>
+                                </div>
+                                <!-- <p class="author"></p> -->
+                            </div>
+                            {% endif %}
+
+                            <div class="attributes">
+                                <div class="date">
+                                    <img class="icon" src="/static/assets/icons/icon_calendar.png"/>  
+                                    <p class="text">Дата последнего анализа: 24.05.2021</p>
+                                </div>
+                            </div>
+                        </div>
+
+                    </a>
+                </li>
+                {% endfor %}
+
+            </ul>
+
+            <!-- <ol class="projects_list">
+                {% for project in all_projects %}
+                    <li class="project_item">
+                        <a href="/project/{{project}}">{{project}}</a>
+                        <p>Продолжительность: 30 секунд</p>
+                    </li>
+                {% endfor %}
+            </ol> -->
+
+        </div>
+        {% endif %}
+    </div>
+
+</body>
+
+</html>

@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="/static/assets/styles/analyzer.style.css">
+    <title>Video Analyzer</title>
+</head>
+<script src="/static/assets/js/d3_6.7.0.min.js"></script>
+<script src="/static/assets/js/plotly-latest.min.js"></script>
+<script src="/static/assets/js/jquery-3.6.0.min.js"></script>
+
+<body>
+    <div class="header">
+        <div class="header_content">
+            <div class="project_back">
+                <a href="/">
+                    <img src="/static/assets/icons/icon_back.png">
+                </a>
+            </div>
+            <div class="project_title">
+                {{project.name}}
+            </div>
+        </div>
+    </div>
+
+    {% if project.prediction_data %}
+        <input type="hidden" id="data_path" value="{{project.path + project.prediction_data}}" >
+    {% else %}
+        <input type="hidden" id="data_path" value="" >
+    {% endif %}
+
+    {% if project.emojis_data %}
+        <input type="hidden" id="emojis_data_path" value="{{project.path + project.emojis_data}}">
+        {% else %}
+        <input type="hidden" id="emojis_data_path" value="">
+    {% endif %}
+
+    
+    <div class="videos_block">
+        {% if project.original_video %}
+        <div class="video_block">
+            <video controls class="video" id="original_video" preload="metadata" src="{{project.path + project.original_video}}"></video>
+        </div>
+        {% endif %}
+    
+        {% if project.analyzed_video %}
+        <div class="video_block">
+            <div class="emotions_block" id="emotions">
+
+            </div>
+            <video controls class="video" id="analyzed_video" preload="metadata" src="{{project.path + project.analyzed_video}}"></video>
+        </div>
+        {% endif %}
+    </div>
+
+    <div>
+        <div id="plot"></div>
+    </div>
+
+    <script>
+        const FPS = 24;
+        const reactionCoeff = 0.045; // коэффициент реакции: степень (коэффициент) разности, на которую нужно реагировать, чтобы отловить резкое изменение эмоций
+        const GRAPH_ELEM_ID_NAME = 'plot'
+
+        let GRAPH_LAYOUT = {
+            title: 'Динамика распознанных эмоций',
+            hovermode:'closest',
+            annotations: []
+        };
+        let GRAPH_ANNOTATIONS = {};
+        let emotionsData = [], timeData = [], keyPointsData = [];
+        let availableEmotions = [];
+        let emojisData = {};
+        let ruEmotionDict = {
+            'angry': 'Злость',
+            "disgust": 'Отвращение',
+            "fear": 'Страх',
+            "happy": 'Радость',
+            "neutral": 'Нейтрально',
+            "sad": 'Грусть',
+            "surprise": 'Удивление'
+        };
+        let timeDataStr = ['00:00:00', '00:00:00', '00:00:00', '00:00:00', '00:00:00', '00:00:00', '00:00:00', '00:00:00', '00:00:00', '00:00:00', '00:00:00', '00:00:00', '00:00:00', '00:00:00', '00:00:00', '00:00:00', '00:00:00', '00:00:00', '00:00:00', '00:00:00', '00:00:00', '00:00:00', '00:00:00', '00:00:00', '00:00:00', '00:00:01', '00:00:01', '00:00:01', '00:00:01', '00:00:01', '00:00:01', '00:00:01', '00:00:01', '00:00:01', '00:00:01', '00:00:01', '00:00:01', '00:00:01', '00:00:01', '00:00:01', '00:00:01', '00:00:01', '00:00:01', '00:00:01', '00:00:01', '00:00:01', '00:00:01', '00:00:01', '00:00:01', '00:00:01', '00:00:02', '00:00:02', '00:00:02', '00:00:02', '00:00:02', '00:00:02', '00:00:02', '00:00:02', '00:00:02', '00:00:02', '00:00:02', '00:00:02', '00:00:02', '00:00:02', '00:00:02', '00:00:02', '00:00:02', '00:00:02', '00:00:02', '00:00:02', '00:00:02', '00:00:02', '00:00:02', '00:00:02', '00:00:02', '00:00:03', '00:00:03', '00:00:03', '00:00:03', '00:00:03', '00:00:03', '00:00:03', '00:00:03', '00:00:03', '00:00:03', '00:00:03', '00:00:03', '00:00:03', '00:00:03', '00:00:03', '00:00:03', '00:00:03', '00:00:03', '00:00:03', '00:00:03', '00:00:03', '00:00:03', '00:00:03', '00:00:03', '00:00:03', '00:00:04', '00:00:04', '00:00:04', '00:00:04', '00:00:04', '00:00:04', '00:00:04', '00:00:04', '00:00:04', '00:00:04', '00:00:04', '00:00:04', '00:00:04', '00:00:04', '00:00:04', '00:00:04', '00:00:04', '00:00:04', '00:00:04', '00:00:04', '00:00:04', '00:00:04', '00:00:04', '00:00:04', '00:00:04', '00:00:05', '00:00:05', '00:00:05', '00:00:05', '00:00:05', '00:00:05', '00:00:05', '00:00:05', '00:00:05', '00:00:05', '00:00:05', '00:00:05', '00:00:05', '00:00:05', '00:00:05', '00:00:05', '00:00:05', '00:00:05', '00:00:05', '00:00:05', '00:00:05', '00:00:05', '00:00:05', '00:00:05', '00:00:05', '00:00:06', '00:00:06', '00:00:06', '00:00:06', '00:00:06', '00:00:06', '00:00:06', '00:00:06', '00:00:06', '00:00:06', '00:00:06', '00:00:06', '00:00:06', '00:00:06', '00:00:06', '00:00:06', '00:00:06', '00:00:06', '00:00:06', '00:00:06', '00:00:06', '00:00:06', '00:00:06', '00:00:06', '00:00:06', '00:00:07', '00:00:07', '00:00:07', '00:00:07', '00:00:07', '00:00:07', '00:00:07', '00:00:07', '00:00:07', '00:00:07', '00:00:07', '00:00:07', '00:00:07', '00:00:07', '00:00:07', '00:00:07', '00:00:07', '00:00:07', '00:00:07', '00:00:07', '00:00:07', '00:00:07', '00:00:07', '00:00:07', '00:00:07', '00:00:08', '00:00:08', '00:00:08', '00:00:08', '00:00:08', '00:00:08', '00:00:08', '00:00:08', '00:00:08', '00:00:08', '00:00:08', '00:00:08', '00:00:08', '00:00:08', '00:00:08', '00:00:08', '00:00:08', '00:00:08', '00:00:08', '00:00:08', '00:00:08', '00:00:08', '00:00:08', '00:00:08', '00:00:08', '00:00:09', '00:00:09', '00:00:09', '00:00:09', '00:00:09', '00:00:09', '00:00:09', '00:00:09', '00:00:09', '00:00:09', '00:00:09', '00:00:09', '00:00:09', '00:00:09', '00:00:09', '00:00:09', '00:00:09', '00:00:09', '00:00:09', '00:00:09', '00:00:09', '00:00:09', '00:00:09', '00:00:09', '00:00:09', '00:00:10', '00:00:10', '00:00:10', '00:00:10', '00:00:10', '00:00:10', '00:00:10', '00:00:10', '00:00:10', '00:00:10', '00:00:10', '00:00:10', '00:00:10', '00:00:10', '00:00:10', '00:00:10', '00:00:10', '00:00:10', '00:00:10', '00:00:10', '00:00:10', '00:00:10', '00:00:10', '00:00:10', '00:00:10', '00:00:11', '00:00:11', '00:00:11', '00:00:11', '00:00:11', '00:00:11', '00:00:11', '00:00:11', '00:00:11', '00:00:11', '00:00:11', '00:00:11', '00:00:11', '00:00:11', '00:00:11', '00:00:11', '00:00:11', '00:00:11', '00:00:11', '00:00:11', '00:00:11', '00:00:11', '00:00:11', '00:00:11', '00:00:11', '00:00:12', '00:00:12', '00:00:12', '00:00:12', '00:00:12', '00:00:12', '00:00:12', '00:00:12', '00:00:12', '00:00:12', '00:00:12', '00:00:12', '00:00:12', '00:00:12', '00:00:12', '00:00:12', '00:00:12', '00:00:12', '00:00:12', '00:00:12', '00:00:12', '00:00:12', '00:00:12', '00:00:12', '00:00:12', '00:00:13', '00:00:13', '00:00:13', '00:00:13', '00:00:13', '00:00:13', '00:00:13', '00:00:13', '00:00:13', '00:00:13', '00:00:13', '00:00:13', '00:00:13', '00:00:13', '00:00:13', '00:00:13', '00:00:13', '00:00:13', '00:00:13', '00:00:13', '00:00:13', '00:00:13', '00:00:13', '00:00:13', '00:00:13', '00:00:14', '00:00:14', '00:00:14', '00:00:14', '00:00:14', '00:00:14', '00:00:14', '00:00:14', '00:00:14', '00:00:14', '00:00:14', '00:00:14', '00:00:14', '00:00:14', '00:00:14', '00:00:14', '00:00:14', '00:00:14', '00:00:14', '00:00:14', '00:00:14', '00:00:14', '00:00:14', '00:00:14', '00:00:14', '00:00:15', '00:00:15', '00:00:15', '00:00:15', '00:00:15', '00:00:15', '00:00:15', '00:00:15', '00:00:15', '00:00:15', '00:00:15', '00:00:15', '00:00:15', '00:00:15', '00:00:15', '00:00:15', '00:00:15', '00:00:15', '00:00:15', '00:00:15', '00:00:15', '00:00:15', '00:00:15', '00:00:15', '00:00:15', '00:00:16', '00:00:16', '00:00:16', '00:00:16', '00:00:16', '00:00:16', '00:00:16', '00:00:16', '00:00:16', '00:00:16', '00:00:16', '00:00:16', '00:00:16', '00:00:16', '00:00:16', '00:00:16', '00:00:16', '00:00:16', '00:00:16', '00:00:16', '00:00:16', '00:00:16', '00:00:16', '00:00:16', '00:00:16', '00:00:17', '00:00:17', '00:00:17', '00:00:17', '00:00:17', '00:00:17', '00:00:17', '00:00:17'];
+        
+        let today = new Date();
+        let dd = String(today.getDate()).padStart(2, '0');
+        let mm = String(today.getMonth() + 1).padStart(2, '0'); //January is 0!
+        let yyyy = today.getFullYear();
+        today = yyyy + '-' + mm + '-' + dd;
+
+        let timeDataStrWithDate = timeDataStr.map(time => today + ' ' + time);
+
+        // ---------- [ Получение DOM элементов ] ----------
+        const original_video = document.getElementById('original_video');
+        const analyzed_video = document.getElementById('analyzed_video');
+        const availableVideos = [original_video, analyzed_video]
+
+        // ---------- [ Назначение обработчиков событий ] ----------
+        original_video.addEventListener("play", function(){ playMultipleVideos(original_video, availableVideos); });
+        original_video.addEventListener("pause", function(){ stopMultipleVideos(original_video, availableVideos); });
+        
+        if(analyzed_video) {
+            analyzed_video.addEventListener("play", function(){ playMultipleVideos(analyzed_video, availableVideos); });
+            analyzed_video.addEventListener("pause", function(){ stopMultipleVideos(analyzed_video, availableVideos); });
+        }
+
+        // ========== [ Конвертация текущего номера кадра в его временнОе значение ] ==========
+        function convertCurrentFrameIntoTime(frameNumber, fps) {
+            dur = frameNumber / fps; // parseInt
+            minutes = dur/60;
+            hours = minutes / 60;
+            seconds = dur % 60;
+            return {hours, minutes, seconds};
+        }
+
+
+        // ========== [ Воспроизведение нескольких видеороликов ] ==========
+        function playMultipleVideos(targetVideo, availableVideos) {
+            const remainingVideos = availableVideos.filter( (anotherVideo) => anotherVideo && targetVideo.id !== anotherVideo.id );
+           
+            const targetVideoHasBeenMuted = targetVideo.muted;
+            const targetVideoCurrentTime = targetVideo.currentTime;
+            for (video of remainingVideos) {
+                video.muted = true;
+                video.currentTime = targetVideoCurrentTime;
+                video.play();
+            }
+            if(targetVideoHasBeenMuted) targetVideo.muted = false;
+            targetVideo.play();
+        }
+
+        // ========== [ Остановка воспроизведения видеороликов ] ==========
+        function stopMultipleVideos(targetVideo, availableVideos) {
+            const isThereTargetVideoExistsInAllAvailableVideos = availableVideos.filter( (anotherVideo) => targetVideo === anotherVideo );
+            const targetVideoCurrentTime = targetVideo.currentTime;
+            for (video of availableVideos) {
+                video.muted = false;
+                video.currentTime = targetVideoCurrentTime;
+                video.pause();
+            }
+            if(!isThereTargetVideoExistsInAllAvailableVideos) {
+                // на случай, если в availableVideos нет targetVideo:
+                targetVideo.muted = false;
+                targetVideo.pause();
+            }
+        }
+        
+        // ========== [ Rerendering аннотаций графика ] ==========
+        function reRenderAnnotations() {
+            Plotly.relayout(GRAPH_ELEM_ID_NAME, {annotations: GRAPH_ANNOTATIONS} );
+        }
+
+        // ========== [ Скрытие аннотации ] ==========
+        function hideAnnotation(chosenAnnotation) {
+            let hideAnnotationDecision = confirm(
+                "Вы хотите скрыть данную аннотацию?\n" +
+                "Название: " + chosenAnnotation.text + "\n" +
+                "Описание: " + chosenAnnotation.hovertext
+            );
+            if(hideAnnotationDecision) {
+                chosenAnnotation.visible = !!!chosenAnnotation.visible;
+                reRenderAnnotations();
+            }
+        }
+
+        // ========== [ Удаление аннотации ] ==========
+        function delAnnotation(chosenAnnotation, preDeleteTextData = "") {
+            if(preDeleteTextData.length > 0) {
+                preDeleteTextData = preDeleteTextData + "\n\n";
+            }
+            else {
+                preDeleteTextData = "Вы действительно хотите удалить данную аннотацию?\n\n"
+            }
+
+            annotationIDX = GRAPH_ANNOTATIONS.indexOf(chosenAnnotation); //GRAPH_ANNOTATIONS.filter( (elem) => elem.text === chosenAnnotation.text && elem.hovertext === chosenAnnotation.hovertext ).index;
+
+            let decision = confirm(
+                preDeleteTextData +
+                "Подтверждение удаления аннотации:\n" + //"Вы действительно хотите удалить данную аннотацию?\n" +
+                "Название: " + GRAPH_ANNOTATIONS[annotationIDX].text + "\n" +
+                "Описание: " + GRAPH_ANNOTATIONS[annotationIDX].hovertext
+            );
+            if(decision) {
+                GRAPH_ANNOTATIONS.splice(annotationIDX, 1);
+                reRenderAnnotations();
+                return true;
+            }
+            return false;
+        }
+        
+        // ========== [ Запрос новых данных на переименование метки ] ==========
+        // Запрос нового наименования label'а
+        function getNewAnnotationLabelName(annotation, defaultPromptLabelValue = "") {
+            defaultPromptLabelValue = defaultPromptLabelValue || annotation.text;
+            return prompt('Введите новое название для метки:', defaultPromptLabelValue);
+        }
+
+        // Запрос нового наименования description'а
+        function getNewAnnotationDescriptionName(annotation, defaultPromptDescriptionValue = "") {
+            defaultPromptDescriptionValue = defaultPromptDescriptionValue || annotation.hovertext;
+            return prompt('Введите новое описание для метки:', defaultPromptDescriptionValue);
+        }
+
+        // Переименование Label'а аннотации
+        function renameAnnotationLabel(annotation, newAnnotationLabel) {
+            console.log("renameAnnotationLabel annotation:", annotation);
+            if(!newAnnotationLabel || newAnnotationLabel.trim().length <= 0) {
+                delAnnotation(annotation, "Вы оставили название метки пустым, хотите удалить аннотацию?")
+                return false;
+            }
+            else {
+                annotation.text = newAnnotationLabel;
+                reRenderAnnotations();
+                return true;
+            }
+        }
+
+        // Переименование Description'а аннотации
+        function renameAnnotationDescription(annotation, newAnnotationDescription) {
+            console.log("renameAnnotationDescription annotaion:", annotation);
+            if(newAnnotationDescription && newAnnotationDescription.trim().length <= 0) {
+                annotation.hovertext = "Описание отсутствует"
+                return false;
+            }
+            else if(!newAnnotationDescription) {
+                // если был передан undefined или что-либо другое, возможно был нажат ESC, ничего не будем делать
+                return false;
+            }
+            // если выше проверки не прошли, значит кейс успешный, можно переименовывать
+            annotation.hovertext = newAnnotationDescription;
+            reRenderAnnotations();
+            return true;
+        }
+        
+        // ========== [ Главный метод получения данных и отображения их в виде графика ] ==========
+        function handleData()
+        {
+            // ============================== [ Подготовка и получение данных ] ==============================
+            const data_path_element = document.getElementById('data_path');
+            const emojis_path_element = document.getElementById('emojis_data_path');
+
+            // Попытка получения пути до файла с данными
+            let data_path_value = null;
+            try {
+                data_path_value = data_path_element.getAttribute("value"); //document.getElementById('data_path').attributes['value'].value
+            } catch {  }
+
+            // Попытка получения пути до файла с данными emoji
+            let emojis_data_path_value = null;
+            try {
+                emojis_data_path_value = emojis_path_element.getAttribute("value"); //document.getElementById('data_path').attributes['value'].value
+            } catch {  }
+
+            console.log(emojis_data_path_value);
+            
+            // Если есть данные
+            if(data_path_value)
+            {
+                // Если есть данные для emoji
+                if(emojis_data_path_value)
+                {
+                    // Извлекаем эти данные с помощью библиотеки d3
+                    d3.json(emojis_data_path_value).then( (emojis) =>
+                    {
+                        emojisData = emojis; // запоминаем данные в глобальной переменной
+                        
+                        console.log(emojis);
+
+                        // Если есть проанализированное видео
+                        if(analyzed_video)
+                        {
+                            // Подписываемся на событие изменения времени воспроизведения
+                            analyzed_video.ontimeupdate = function()
+                            {
+                                const currentFrameNumberByTime = parseInt(this.currentTime * 24)
+                                let emotions = emojisData[currentFrameNumberByTime + 1] // извлекаем список эмоций для текущего кадра по времени
+                                if(emotions) { // если эмоции были извлечены
+                                    $('#emotions').html(''); // очищаем предыдущий показ смайликов
+                                    for (emoji of emotions) { // пробежимся по эмоциям для кадра
+                                        // Добавим изображение смайлика для кадра:
+                                        $('#emotions').append('<img class="emoji_img" src="/static/assets/emojis/' + emoji + '.png" />')
+                                        // $('#emotions').append('<p>' + emotions + '</p>')
+                                    }
+                                }
+                                else $('#emotions').html(''); // иначе просто очищаем место, где отображаются смайлики
+                            };
+                        }
+                    });
+                }
+
+
+                let allData = d3.csv(
+                    data_path_value //,
+                    // Real-time data processing:
+                    // function (data) {
+                    //     ...
+                    // }
+                );
+                
+                // получим данные
+                allData.then( (data) =>
+                { // как только данные будут получены, обработаем их:
+                    
+                    // пройдем по всем имеющимся записям (строкам) с данными:
+                    for (const [idx, entry] of data.entries()) 
+                    {
+                        // пройдем по каждому ключу с наименованием той или иной эмоции (angry, disgust и т.п)
+                        Object.keys(entry).map(emotionCategoryName =>
+                        {
+                            // если наш объект с будучи всеми агрегированными данными не имеет еще свойства (ключа) с наименованием категории эмоции, то проведем инициализацию:
+                            if(!emotionsData.hasOwnProperty(emotionCategoryName))
+                            {
+                                // проинициализируем объект для рассматриваемой категории эмоции и наполним его необходимыми свойствами для отображения динамики этой эмоции на графике
+                                emotionsData[emotionCategoryName] = {
+                                    type: "scatter",
+                                    mode: "lines",
+                                    name: ruEmotionDict[emotionCategoryName],
+                                    x: [], // [TIME] массив со значениями времени рассматриваемого кадра
+                                    y: [], // [RECOGNIZED_VALUES] массив со значениями предсказаний той или иной эмоции для каждого кадра (каждому кадру установлен в соответствие каждый элемент данного массива)
+                                    // line: {color: '#17BECF'}
+                                };
+                            }
+                            emotionsData[emotionCategoryName].x.push(
+                                idx
+                            );
+                            emotionsData[emotionCategoryName].y.push(
+                                parseFloat(
+                                    entry[emotionCategoryName]
+                                )
+                            ); // добавим в ту или иную категорию эмоций ее соответствующее значение для текущего рассматриваемого кадра (entry)
+
+
+                            // Теперь обработаем момент с ключевыми точками (действуем по той же схеме)
+                            if(idx > 1) // будем рассматривать только после того момента, как только нам будет с чем сравнивать (если уже рассмотренно боле 1ой точки)
+                            {
+                                // опять же, если свойства с таким названием категории эмоции еще не было задано объекту,
+                                if(!keyPointsData.hasOwnProperty(emotionCategoryName))
+                                {
+                                    // то проинициализируем
+                                    keyPointsData[emotionCategoryName] = {
+                                        type: "scatter",
+                                        mode: "markers",
+                                        name: '[K] ' + ruEmotionDict[emotionCategoryName],
+                                        marker: {
+                                            size: 7,
+                                            color: '#E91B1D',
+                                            line: {
+                                                color: 'black', //'rgb(231, 99, 250)',
+                                                width: 1
+                                            },
+                                        },
+                                        x: [],
+                                        y: [],
+                                        // showlegend: false,
+                                        // opacity: 0.5,
+                                        // name: ruEmotionDict[emotionCategoryName],
+                                    };
+                                    console.log(keyPointsData.hasOwnProperty(emotionCategoryName))
+                                }
+                                currentEmotionDataLength = emotionsData[emotionCategoryName].y.length;
+                                prevEmotionDataValue = emotionsData[emotionCategoryName].y[ currentEmotionDataLength - 2 ];
+                                currEmotionDataValue = emotionsData[emotionCategoryName].y[ currentEmotionDataLength - 1 ];
+                                diffBetweenCurrAndPrevEmotionDataValues = currEmotionDataValue - prevEmotionDataValue;
+                                
+                                // если абсолютное значение разницы больше коэффициента реакции, значит произошло резкое изменение эмоции
+                                if( Math.abs(diffBetweenCurrAndPrevEmotionDataValues) > reactionCoeff )
+                                {
+                                    keyPointsData[emotionCategoryName].x.push(
+                                        idx
+                                    );
+                                    keyPointsData[emotionCategoryName].y.push(
+                                        parseFloat(
+                                            entry[emotionCategoryName]
+                                        )
+                                    );
+                                }
+                            }
+                            
+                        });
+
+                        timeData.push(
+                            idx
+                        );
+                    }
+                    console.log("emotionsData:", emotionsData);
+                    console.log("timeData:", timeData);
+                    console.log("keyPointsData:", keyPointsData);
+
+                    availableEmotions = [...data.columns];
+
+                    // Добавим DataTrace'ы
+                    let dataTraces = [];
+                    Object.values(emotionsData).forEach(currentEmotionTrace => {
+                        dataTraces.push(currentEmotionTrace);
+                    });
+
+                    // Добавим также ключевые моменты в DataTrace'ы
+                    Object.values(keyPointsData).forEach(currentEmotionKeyPointTrace => {
+                        dataTraces.push(currentEmotionKeyPointTrace);
+                    });
+                    // ============================== [ Подготовка Layout'а и отрисовка графика ] ==============================
+                    
+                    GRAPH_LAYOUT = {
+                        ...GRAPH_LAYOUT,
+                        
+                        xaxis: {
+                            title: 'Продолжительность видео',
+                            rangeslider: {
+                                range: timeDataStrWithDate
+                            },
+                        },
+                        yaxis: {
+                            title: 'Вероятность эмоции',
+                            autorange: true,
+                            type: 'linear'
+                        }
+                    };
+                    Plotly.newPlot(GRAPH_ELEM_ID_NAME, dataTraces, GRAPH_LAYOUT, {responsive: true});
+                    
+                    // ============================== [ Аннотации и обработка кликов ] ==============================
+                    GRAPH_ANNOTATIONS = GRAPH_LAYOUT.annotations || [];
+
+                    // ---------- Клик по самой аннотации
+                    const plotHtmlElement = document.getElementById(GRAPH_ELEM_ID_NAME);
+                    plotHtmlElement.on('plotly_clickannotation', function(annotaionData) {
+
+                        const chosenAnnotation = GRAPH_ANNOTATIONS[annotaionData.index];
+
+                        // ---------- Клик по аннотации с зажатой клавишей ALT
+                        if(annotaionData.event.altKey) {
+                            if(delAnnotation(chosenAnnotation)) {
+                                alert('Аннотация была удалена!')
+                            }
+                        }
+                        // ---------- Клик по аннотации с зажатой клавишей CTRL
+                        else if(annotaionData.event.ctrlKey) {
+                            const newLabelName = getNewAnnotationLabelName(chosenAnnotation)
+                            if(renameAnnotationLabel(chosenAnnotation, newLabelName)) {
+                                alert('Аннотация была переименована')
+                            }
+                        }
+                        // ---------- Клик по аннотации с зажатой клавишей SHIFT
+                        else if(annotaionData.event.shiftKey) {
+                            const newDescriptionName = getNewAnnotationDescriptionName(chosenAnnotation)
+                            if(renameAnnotationDescription(chosenAnnotation, newDescriptionName)) {
+                                alert('Описание аннотации было изменено');
+                            }
+                        }
+                        // ---------- Простой клик по аннотации
+                        else hideAnnotation(chosenAnnotation);
+                    });
+
+                    // ---------- Клик по графику
+                    plotHtmlElement.on('plotly_click', function(clickData)
+                    {
+                        let annotaionLabel = null;
+                        let annotaionDescription = null;
+                        if(clickData.event.altKey) {
+                            annotaionLabel = prompt('Введите название для метки:');
+                            if(!annotaionLabel) {
+                                alert('Метка не была установлена, т.к ей не было присвоено название.')
+                            }
+                            else {
+                                annotaionDescription = prompt('Введите описание для метки:');
+                                console.log(annotaionLabel, typeof annotaionLabel, annotaionLabel == '');
+                                console.log(annotaionDescription, typeof annotaionDescription, annotaionLabel == '');
+                            }
+
+                            if(annotaionLabel && annotaionLabel.length > 0) annotaionLabel = annotaionLabel.trim();
+                            if(annotaionDescription && annotaionDescription.length > 0) annotaionDescription = annotaionDescription.trim();
+                        }
+
+                        // ---------- Обработка точек
+                        console.log("Plotly clickData:", clickData);
+                        let xValue = null, yValue = null;
+                        for(var i=0; i < clickData.points.length; i++) {
+                            xValue = clickData.points[i].x;
+                            yValue = clickData.points[i].y.toPrecision(4);
+
+                            if(annotaionLabel) {
+                                annotation = {
+                                    text: annotaionLabel,
+                                    x: xValue,
+                                    y: yValue,
+                                    bgcolor: 'rgba(255,255,255,0.9)',
+                                    bordercolor: '#333',
+                                    borderpad: 2,
+                                    arrowcolor: '#333',
+                                    // clicktoshow: 'onoff',
+                                    xclick: xValue,
+                                    yclick: yValue,
+                                    hovertext: annotaionDescription || 'Описание отсутствует',
+                                    hoverlabel:{
+                                        bgcolor: "rgb(255, 255, 255, 1)"
+                                    },
+                                    visible: true
+                                }
+                                GRAPH_ANNOTATIONS.push(annotation);
+                                reRenderAnnotations();
+                            }
+                        }
+
+                        // ---------- Перематывание видео
+                        let moveTo = convertCurrentFrameIntoTime(xValue, FPS).seconds;
+                        original_video.currentTime = moveTo;
+                        if(analyzed_video) analyzed_video.currentTime = moveTo;
+                    });
+                })
+                
+            }
+            else console.log("There is no analyzed data for this project now!");
+        };
+        
+        handleData();
+
+    </script>
+
+
+    <form action="/analyze" method="POST">
+        <input class="submit_button" type="submit" name="submit_video_analyzing" value="Запустить анализ видео" />
+    </form>
+</body>
+
+</html>
